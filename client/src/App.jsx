@@ -55,6 +55,7 @@ function Header({ title, onBack }) {
       )}
       <h1>{title}</h1>
       <span className="spacer" />
+      <span style={{ fontSize: 11, opacity: 0.45, fontWeight: 400 }}>v1.1</span>
     </header>
   );
 }
