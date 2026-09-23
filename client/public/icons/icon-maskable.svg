@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <!-- Maskable icon: full-bleed background, motif inside the 80% safe zone. -->
+  <rect width="512" height="512" fill="#0f766e"/>
+  <polygon points="153.6,133.12 358.4,133.12 358.4,276.48 256,389.12 153.6,276.48" fill="#ffffff"/>
+  <polyline points="202.24,258.56 243.2,299.52 314.88,212.48" fill="none" stroke="#0f766e" stroke-width="33" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

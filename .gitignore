@@ -1,0 +1,30 @@
+# .gitignore — Allergy Scanner (React + Node rebuild)
+
+# dependencies
+node_modules/
+client/node_modules/
+server/node_modules/
+
+# builds
+client/dist/
+server/dist/
+
+# uploads / temp OCR artifacts
+server/uploads/
+*.traineddata
+*.tmp
+
+# env (no secrets are committed; keep it that way)
+.env
+.env.*
+!.env.example
+
+# logs
+*.log
+npm-debug.log*
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/

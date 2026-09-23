@@ -1,0 +1,33 @@
+# Production: app + Caddy reverse proxy with automatic HTTPS.
+#
+# Deploy:
+#   DOMAIN=scanner.example.com docker compose up --build -d
+#
+# DOMAIN is required — Caddy uses it to fetch a Let's Encrypt certificate.
+
+services:
+  app:
+    build: .
+    restart: unless-stopped
+    expose:
+      - "3001" # internal only; the outside world goes through Caddy
+    environment:
+      - NODE_ENV=production
+      - PORT=3001
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    depends_on:
+      - app
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+
+volumes:
+  caddy_data:
+  caddy_config:

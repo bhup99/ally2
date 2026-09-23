@@ -1,0 +1,8 @@
+# Caddyfile — reverse proxy with automatic HTTPS.
+# {$DOMAIN} is read from the environment (set via `DOMAIN=` in docker compose).
+# Security headers are set by helmet in the Express app; Caddy handles TLS
+# and forwards the client IP via X-Forwarded-For (Express trusts one proxy hop).
+
+{$DOMAIN} {
+	reverse_proxy app:3001
+}
