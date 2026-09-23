@@ -129,6 +129,58 @@ function Thumb({ blob }) {
 
 /* --------------------------------- screens --------------------------------- */
 
+function isIOS() {
+  if (typeof navigator === 'undefined') return false;
+  const ua = navigator.userAgent || '';
+  // iPadOS 13+ reports as MacIntel — maxTouchPoints distinguishes it.
+  return (
+    /iPad|iPhone|iPod/.test(ua) ||
+    (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1)
+  );
+}
+
+function isStandalone() {
+  if (typeof window === 'undefined') return false;
+  return (
+    window.matchMedia('(display-mode: standalone)').matches ||
+    window.navigator.standalone === true // iOS Safari
+  );
+}
+
+// iOS Safari never shows an automatic "install" prompt, so iPhone visitors
+// get a short guide instead. Dismissible; hidden once installed.
+function IOSInstallHint() {
+  const [dismissed, setDismissed] = useState(() => {
+    try {
+      return localStorage.getItem('ios-install-hint-dismissed') === '1';
+    } catch {
+      return true;
+    }
+  });
+  if (!isIOS() || isStandalone() || dismissed) return null;
+  const dismiss = () => {
+    try {
+      localStorage.setItem('ios-install-hint-dismissed', '1');
+    } catch {
+      /* ignore */
+    }
+    setDismissed(true);
+  };
+  return (
+    <div className="card">
+      <h3>📲 On iPhone? Install the app</h3>
+      <ol style={{ margin: 0, paddingLeft: 20, fontSize: '0.95rem', lineHeight: 1.5 }}>
+        <li>Tap the <b>Share</b> button in Safari (square with an arrow)</li>
+        <li>Tap <b>Add to Home Screen</b></li>
+        <li>Tap <b>Add</b> — done</li>
+      </ol>
+      <button className="ghostbtn" onClick={dismiss}>
+        Got it
+      </button>
+    </div>
+  );
+}
+
 function HomeScreen({ selectedCount, onAddAllergies, onScan, onHistory }) {
   return (
     <div className="screen">
@@ -152,6 +204,7 @@ function HomeScreen({ selectedCount, onAddAllergies, onScan, onHistory }) {
       {selectedCount === 0 && (
         <p className="hint">Tip: add your allergies first — or scan right away and add them later.</p>
       )}
+      <IOSInstallHint />
     </div>
   );
 }
