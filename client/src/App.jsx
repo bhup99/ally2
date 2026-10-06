@@ -9,7 +9,7 @@ const OCR_TIMEOUT_MS = 90000;
 
 // Bump this on every release. It drives the header badge, the one-time
 // deploy confirmation, and the console launch log.
-const APP_VERSION = '1.2.1';
+const APP_VERSION = '1.2.2';
 
 function loadAllergyState() {
   try {
@@ -119,16 +119,25 @@ function VerdictBanner({ verdict, labels, selectedCount }) {
 
 function Thumb({ blob }) {
   const [url, setUrl] = useState(null);
+  const [broken, setBroken] = useState(false);
   useEffect(() => {
-    if (!blob) return;
-    const u = URL.createObjectURL(blob);
+    setBroken(false);
+    if (!(blob instanceof Blob) || blob.size === 0) return;
+    let u;
+    try {
+      u = URL.createObjectURL(blob);
+    } catch {
+      setBroken(true);
+      return;
+    }
     setUrl(u);
     return () => URL.revokeObjectURL(u);
   }, [blob]);
 
-  if (!blob) return <div className="thumb placeholder" aria-hidden="true">📄</div>;
+  if (!(blob instanceof Blob) || blob.size === 0 || broken)
+    return <div className="thumb placeholder" aria-hidden="true">📄</div>;
   if (!url) return <div className="thumb placeholder" aria-hidden="true" />;
-  return <img className="thumb" src={url} alt="" />;
+  return <img className="thumb" src={url} alt="" onError={() => setBroken(true)} />;
 }
 
 /* --------------------------------- screens --------------------------------- */
@@ -609,10 +618,19 @@ function HistoryScreen({ onBack, onOpen }) {
 
 function HistoryDetailScreen({ entry, onBack }) {
   const [imgUrl, setImgUrl] = useState(null);
+  const [imgBroken, setImgBroken] = useState(false);
 
   useEffect(() => {
-    if (!entry.image) return;
-    const u = URL.createObjectURL(entry.image);
+    setImgBroken(false);
+    setImgUrl(null);
+    if (!(entry.image instanceof Blob) || entry.image.size === 0) return;
+    let u;
+    try {
+      u = URL.createObjectURL(entry.image);
+    } catch {
+      setImgBroken(true);
+      return;
+    }
     setImgUrl(u);
     return () => URL.revokeObjectURL(u);
   }, [entry]);
@@ -644,7 +662,14 @@ function HistoryDetailScreen({ entry, onBack }) {
           ))}
         </div>
       )}
-      {imgUrl && <img className="detailimg" src={imgUrl} alt="Scanned label" />}
+      {imgUrl && !imgBroken && (
+        <img
+          className="detailimg"
+          src={imgUrl}
+          alt="Scanned label"
+          onError={() => setImgBroken(true)}
+        />
+      )}
       {entry.extractedText ? (
         <>
           <h3 className="sectiontitle">Label text</h3>
