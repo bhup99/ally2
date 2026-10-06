@@ -9,7 +9,7 @@ const OCR_TIMEOUT_MS = 90000;
 
 // Bump this on every release. It drives the header badge, the one-time
 // deploy confirmation, and the console launch log.
-const APP_VERSION = '1.2.5';
+const APP_VERSION = '1.2.6';
 
 // Public support address shown on the home screen "Contact us" button.
 const SUPPORT_EMAIL = 'bhupeshkushwah99@gmail.com';
@@ -220,7 +220,7 @@ function IOSInstallHint() {
   );
 }
 
-function HomeScreen({ selectedCount, onAddAllergies, onScan, onHistory }) {
+function HomeScreen({ selectedCount, onAddAllergies, onScan, onHistory, onContact }) {
   return (
     <div className="screen">
       <div className="hero">
@@ -245,7 +245,7 @@ function HomeScreen({ selectedCount, onAddAllergies, onScan, onHistory }) {
       )}
       <IOSInstallHint />
       <InstallFooter />
-      <ContactFooter />
+      <ContactFooter onContact={onContact} />
     </div>
   );
 }
@@ -271,19 +271,191 @@ function InstallFooter() {
   );
 }
 
-// Contact button at the bottom of the home page — opens the user's email
-// app with a pre-filled subject for feedback or issues.
-function ContactFooter() {
-  const href =
-    `mailto:${SUPPORT_EMAIL}` +
-    `?subject=${encodeURIComponent('Allergy Scanner feedback')}`;
+// Contact button at the bottom of the home page — opens the in-app
+// contact form (no email app involved).
+function ContactFooter({ onContact }) {
   return (
     <footer className="contactfooter">
-      <a className="contactlink" href={href}>
+      <button className="contactlink" onClick={onContact}>
         💬 Contact us
-      </a>
+      </button>
       <p className="muted">Questions, issues, or ideas? We'd love to hear from you.</p>
     </footer>
+  );
+}
+
+// In-app contact form. Sends the message to SUPPORT_EMAIL via a form-to-email
+// relay — the user never leaves the app and no email app is opened.
+// Only what the user types (plus app version + device type, disclosed below)
+// is sent. Nothing is required except the title and description.
+function ContactScreen({ onBack, onHome }) {
+  const [name, setName] = useState('');
+  const [title, setTitle] = useState('');
+  const [description, setDescription] = useState('');
+  const [extra, setExtra] = useState('');
+  const [honey, setHoney] = useState(''); // spam trap — humans never fill this
+  const [status, setStatus] = useState('idle'); // idle | sending | sent | error
+
+  const deviceInfo = () => {
+    try {
+      const ua = navigator.userAgent || '';
+      const platform = /Android/i.test(ua)
+        ? 'Android'
+        : /iPhone|iPad|iPod/i.test(ua)
+          ? 'iOS'
+          : 'Desktop/other';
+      return `${platform} — ${ua.slice(0, 140)}`;
+    } catch {
+      return 'unknown';
+    }
+  };
+
+  const mailtoFallback =
+    `mailto:${SUPPORT_EMAIL}` +
+    `?subject=${encodeURIComponent(`Allergy Scanner feedback: ${title.trim() || '…'}`)}` +
+    `&body=${encodeURIComponent(
+      `Name: ${name.trim() || '(not given)'}\n\n${description.trim()}\n\nAnything else: ${extra.trim() || '—'}`
+    )}`;
+
+  const submit = async (e) => {
+    e.preventDefault();
+    if (honey) {
+      setStatus('sent'); // bot — pretend it worked
+      return;
+    }
+    if (!title.trim() || !description.trim() || status === 'sending') return;
+    setStatus('sending');
+    try {
+      const res = await fetch(`https://formsubmit.co/ajax/${SUPPORT_EMAIL}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+        body: JSON.stringify({
+          _subject: `Allergy Scanner feedback: ${title.trim()}`,
+          _template: 'table',
+          _captcha: 'false',
+          Name: name.trim() || '(not given)',
+          'Issue title': title.trim(),
+          Description: description.trim(),
+          'Anything else': extra.trim() || '—',
+          'App version': APP_VERSION,
+          Device: deviceInfo(),
+        }),
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      setStatus('sent');
+    } catch (err) {
+      console.error('Feedback send failed:', err);
+      setStatus('error');
+    }
+  };
+
+  return (
+    <div className="screen">
+      <Header title="Contact us" onBack={onBack} onHome={onHome} />
+      {status === 'sent' ? (
+        <div className="card">
+          <h3 style={{ marginTop: 0 }}>✅ Message sent</h3>
+          <p className="muted">
+            Thanks{name.trim() ? `, ${name.trim()}` : ''}! Your message is on its
+            way — we'll take a look soon.
+          </p>
+          <button className="bigbtn primary" onClick={onHome}>
+            🏠 Back to home
+          </button>
+        </div>
+      ) : (
+        <form className="stack" onSubmit={submit}>
+          <div>
+            <label className="fieldlabel" htmlFor="contact-name">
+              Your name <span className="muted">(optional)</span>
+            </label>
+            <input
+              id="contact-name"
+              className="field"
+              type="text"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="What should we call you?"
+              autoComplete="name"
+            />
+          </div>
+          <div>
+            <label className="fieldlabel" htmlFor="contact-title">
+              Title
+            </label>
+            <input
+              id="contact-title"
+              className="field"
+              type="text"
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              placeholder="e.g. App crashes when I scan"
+              required
+            />
+          </div>
+          <div>
+            <label className="fieldlabel" htmlFor="contact-desc">
+              Describe the issue
+            </label>
+            <textarea
+              id="contact-desc"
+              className="textarea"
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              placeholder="What happened? What were you trying to do?"
+              required
+            />
+          </div>
+          <div>
+            <label className="fieldlabel" htmlFor="contact-extra">
+              Anything else you'd like to share{' '}
+              <span className="muted">(optional)</span>
+            </label>
+            <textarea
+              id="contact-extra"
+              className="textarea"
+              style={{ minHeight: 70 }}
+              value={extra}
+              onChange={(e) => setExtra(e.target.value)}
+              placeholder="e.g. your phone model, or a way to reach you if you'd like a reply"
+            />
+          </div>
+          {/* Spam trap — hidden from humans */}
+          <input
+            type="text"
+            value={honey}
+            onChange={(e) => setHoney(e.target.value)}
+            style={{ display: 'none' }}
+            tabIndex={-1}
+            autoComplete="off"
+            aria-hidden="true"
+          />
+          <p className="rechecknote">
+            Only what you type here is sent to the app maker by email — plus
+            your app version and device type to help fix bugs. Your allergy
+            list and scan history stay on your device. Nothing else is asked
+            for or collected.
+          </p>
+          {status === 'error' && (
+            <div className="card error" role="alert">
+              <h3>Couldn't send that</h3>
+              <p className="muted">
+                Something went wrong sending your message. You can also email
+                us directly:{' '}
+                <a href={mailtoFallback}>{SUPPORT_EMAIL}</a>
+              </p>
+            </div>
+          )}
+          <button
+            className="bigbtn primary"
+            type="submit"
+            disabled={status === 'sending' || !title.trim() || !description.trim()}
+          >
+            {status === 'sending' ? 'Sending…' : '📨 Send feedback'}
+          </button>
+        </form>
+      )}
+    </div>
   );
 }
 
@@ -856,6 +1028,7 @@ export default function App() {
           onAddAllergies={() => setScreen('allergies')}
           onScan={() => setScreen('scan')}
           onHistory={() => setScreen('history')}
+          onContact={() => setScreen('contact')}
         />
       )}
       {screen === 'allergies' && (
@@ -903,6 +1076,9 @@ export default function App() {
           onBack={() => setScreen('history')}
           onHome={goHome}
         />
+      )}
+      {screen === 'contact' && (
+        <ContactScreen onBack={() => setScreen('home')} onHome={goHome} />
       )}
     </div>
   );

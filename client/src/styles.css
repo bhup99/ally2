@@ -205,6 +205,7 @@ label.bigbtn { cursor: pointer; }
 .contactfooter .muted { font-size: 0.85rem; margin: 6px 0 0; }
 .contactlink {
   display: inline-block;
+  font-family: inherit;
   font-weight: 700;
   font-size: 1rem;
   color: var(--teal-dark);
@@ -213,6 +214,7 @@ label.bigbtn { cursor: pointer; }
   background: var(--card);
   border-radius: 999px;
   padding: 10px 22px;
+  cursor: pointer;
 }
 .contactlink:active { transform: scale(0.97); }
 
