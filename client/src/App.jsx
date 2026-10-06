@@ -7,6 +7,10 @@ import { downscaleImage } from './lib/image.js';
 const STORAGE_KEY = 'allergy-scanner:v1';
 const OCR_TIMEOUT_MS = 90000;
 
+// Bump this on every release. It drives the header badge, the one-time
+// deploy confirmation, and the console launch log.
+const APP_VERSION = '1.2.0';
+
 function loadAllergyState() {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
@@ -55,7 +59,7 @@ function Header({ title, onBack }) {
       )}
       <h1>{title}</h1>
       <span className="spacer" />
-      <span style={{ fontSize: 11, opacity: 0.45, fontWeight: 400 }}>v1.1</span>
+      <span style={{ fontSize: 11, opacity: 0.45, fontWeight: 400 }}>v{APP_VERSION}</span>
     </header>
   );
 }
@@ -205,6 +209,64 @@ function HomeScreen({ selectedCount, onAddAllergies, onScan, onHistory }) {
         <p className="hint">Tip: add your allergies first — or scan right away and add them later.</p>
       )}
       <IOSInstallHint />
+      <InstallFooter />
+    </div>
+  );
+}
+
+// Permanent install instructions at the bottom of the home page —
+// how to save the site as an app for quick visits on Android and iPhone.
+function InstallFooter() {
+  return (
+    <footer className="installfooter">
+      <h3>📲 Save this as an app</h3>
+      <p>
+        <b>Android (Chrome):</b> tap the <b>⋮</b> menu →{' '}
+        <b>Add to Home screen</b> (or <b>Install app</b>) → Add.
+      </p>
+      <p>
+        <b>iPhone (Safari):</b> tap <b>Share</b> (square with an arrow) →{' '}
+        <b>Add to Home Screen</b> → Add.
+      </p>
+      <p className="muted" style={{ marginBottom: 0 }}>
+        It then opens full-screen from your home screen, just like a native app.
+      </p>
+    </footer>
+  );
+}
+
+// One-time "new version deployed" confirmation. Shows once per APP_VERSION
+// (tracked in localStorage) and logs to the console on every launch.
+function DeployNote() {
+  const [visible, setVisible] = useState(false);
+
+  useEffect(() => {
+    console.log(
+      `%c[Allergy Scanner] v${APP_VERSION} — deployed from GitHub`,
+      'color:#0e7c66;font-weight:bold'
+    );
+    let seen = false;
+    try {
+      const key = `allergy-scanner:deploy-note:${APP_VERSION}`;
+      seen = localStorage.getItem(key) === '1';
+      if (!seen) localStorage.setItem(key, '1');
+    } catch {
+      seen = true; // storage unavailable — don't nag
+    }
+    if (!seen) {
+      setVisible(true);
+      const t = setTimeout(() => setVisible(false), 9000);
+      return () => clearTimeout(t);
+    }
+  }, []);
+
+  if (!visible) return null;
+  return (
+    <div className="deploynote" role="status">
+      <span>✅ New version deployed (v{APP_VERSION})</span>
+      <button className="deploynote-x" onClick={() => setVisible(false)} aria-label="Dismiss">
+        ✕
+      </button>
     </div>
   );
 }
@@ -678,6 +740,7 @@ export default function App() {
 
   return (
     <div className="app">
+      <DeployNote />
       {screen === 'home' && (
         <HomeScreen
           selectedCount={allergyState.selected.length}
