@@ -196,6 +196,25 @@ label.bigbtn { cursor: pointer; }
 .banner.neutral { background: var(--neutral-bg); border: 2px solid var(--neutral); color: var(--neutral); }
 .banner.warn { background: #fffbeb; border: 2px solid #b45309; color: #92400e; text-align: left; }
 .rechecknote { color: var(--muted); font-size: 0.85rem; margin: 8px 2px 0; }
+.contactfooter {
+  margin-top: 22px;
+  padding: 16px 4px 8px;
+  border-top: 1px solid var(--line);
+  text-align: center;
+}
+.contactfooter .muted { font-size: 0.85rem; margin: 6px 0 0; }
+.contactlink {
+  display: inline-block;
+  font-weight: 700;
+  font-size: 1rem;
+  color: var(--teal-dark);
+  text-decoration: none;
+  border: 1px solid var(--line);
+  background: var(--card);
+  border-radius: 999px;
+  padding: 10px 22px;
+}
+.contactlink:active { transform: scale(0.97); }
 
 .matchchips { display: flex; flex-wrap: wrap; gap: 8px; }
 .matchchip {

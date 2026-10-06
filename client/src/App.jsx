@@ -9,7 +9,10 @@ const OCR_TIMEOUT_MS = 90000;
 
 // Bump this on every release. It drives the header badge, the one-time
 // deploy confirmation, and the console launch log.
-const APP_VERSION = '1.2.4';
+const APP_VERSION = '1.2.5';
+
+// Public support address shown on the home screen "Contact us" button.
+const SUPPORT_EMAIL = 'bhupeshkushwah99@gmail.com';
 
 function loadAllergyState() {
   try {
@@ -242,6 +245,7 @@ function HomeScreen({ selectedCount, onAddAllergies, onScan, onHistory }) {
       )}
       <IOSInstallHint />
       <InstallFooter />
+      <ContactFooter />
     </div>
   );
 }
@@ -263,6 +267,22 @@ function InstallFooter() {
       <p className="muted" style={{ marginBottom: 0 }}>
         It then opens full-screen from your home screen, just like a native app.
       </p>
+    </footer>
+  );
+}
+
+// Contact button at the bottom of the home page — opens the user's email
+// app with a pre-filled subject for feedback or issues.
+function ContactFooter() {
+  const href =
+    `mailto:${SUPPORT_EMAIL}` +
+    `?subject=${encodeURIComponent('Allergy Scanner feedback')}`;
+  return (
+    <footer className="contactfooter">
+      <a className="contactlink" href={href}>
+        💬 Contact us
+      </a>
+      <p className="muted">Questions, issues, or ideas? We'd love to hear from you.</p>
     </footer>
   );
 }
