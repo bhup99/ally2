@@ -9,7 +9,7 @@ const OCR_TIMEOUT_MS = 90000;
 
 // Bump this on every release. It drives the header badge, the one-time
 // deploy confirmation, and the console launch log.
-const APP_VERSION = '1.2.6';
+const APP_VERSION = '1.2.7';
 
 // Public support address shown on the home screen "Contact us" button.
 const SUPPORT_EMAIL = 'bhupeshkushwah99@gmail.com';
@@ -326,22 +326,22 @@ function ContactScreen({ onBack, onHome }) {
     if (!title.trim() || !description.trim() || status === 'sending') return;
     setStatus('sending');
     try {
-      const res = await fetch(`https://formsubmit.co/ajax/${SUPPORT_EMAIL}`, {
+      // Same-origin: the server forwards to the email relay (the browser
+      // Content-Security-Policy blocks direct third-party requests).
+      const res = await fetch('/api/feedback', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          _subject: `Allergy Scanner feedback: ${title.trim()}`,
-          _template: 'table',
-          _captcha: 'false',
-          Name: name.trim() || '(not given)',
-          'Issue title': title.trim(),
-          Description: description.trim(),
-          'Anything else': extra.trim() || '—',
-          'App version': APP_VERSION,
-          Device: deviceInfo(),
+          name: name.trim(),
+          title: title.trim(),
+          description: description.trim(),
+          extra: extra.trim(),
+          appVersion: APP_VERSION,
+          device: deviceInfo(),
         }),
       });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data.ok) throw new Error(data.error || `HTTP ${res.status}`);
       setStatus('sent');
     } catch (err) {
       console.error('Feedback send failed:', err);
