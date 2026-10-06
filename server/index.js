@@ -27,6 +27,10 @@ app.use(
         'img-src': ["'self'", 'data:', 'blob:'],
       },
     },
+    // The email relay requires a Referer header to accept submissions;
+    // Helmet's default (no-referrer) strips it. This restores the normal
+    // browser behavior of sending just the origin cross-origin.
+    referrerPolicy: { policy: 'strict-origin-when-cross-origin' },
   })
 );
 app.use(cors());
