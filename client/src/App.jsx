@@ -5,11 +5,14 @@ import { saveScan, listScans, deleteScan, clearScans } from './lib/db.js';
 import { downscaleImage } from './lib/image.js';
 
 const STORAGE_KEY = 'allergy-scanner:v1';
+// One-time migration flag: older builds saved custom allergies without
+// adding their id to `selected`, leaving them silently inactive.
+const CUSTOM_REPAIR_KEY = 'allergy-scanner:custom-repair-v1';
 const OCR_TIMEOUT_MS = 90000;
 
 // Bump this on every release. It drives the header badge, the one-time
 // deploy confirmation, and the console launch log.
-const APP_VERSION = '1.2.9';
+const APP_VERSION = '1.2.10';
 
 // Public support address shown on the home screen "Contact us" button.
 const SUPPORT_EMAIL = 'bhupeshkushwah99@gmail.com';
@@ -19,10 +22,24 @@ function loadAllergyState() {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return { selected: [], custom: [] };
     const parsed = JSON.parse(raw);
-    return {
-      selected: Array.isArray(parsed.selected) ? parsed.selected : [],
-      custom: Array.isArray(parsed.custom) ? parsed.custom : [],
-    };
+    const selected = Array.isArray(parsed.selected) ? parsed.selected : [];
+    const custom = Array.isArray(parsed.custom) ? parsed.custom : [];
+    // One-time repair: activate custom allergies that older builds left out
+    // of `selected` (silently inactive). After this, the user's own toggles
+    // are respected — the repair never runs again.
+    try {
+      if (!localStorage.getItem(CUSTOM_REPAIR_KEY)) {
+        const have = new Set(selected);
+        const missing = custom
+          .map((c) => c && c.id)
+          .filter((id) => id && !have.has(id));
+        if (missing.length) selected.push(...missing);
+        localStorage.setItem(CUSTOM_REPAIR_KEY, '1');
+      }
+    } catch {
+      /* storage unavailable — skip repair */
+    }
+    return { selected, custom };
   } catch {
     return { selected: [], custom: [] };
   }
@@ -60,7 +77,7 @@ function liveCheck(entry, selected, custom) {
   }
   const matches = findMatches(entry.extractedText, selected, custom);
   const labels = [...new Set(matches.map((m) => m.label))];
-  const verdict = computeVerdict(matches, selected.length + custom.length);
+  const verdict = computeVerdict(matches, selected.length);
   return { verdict, labels, matches, changed: verdict !== entry.verdict };
 }
 
@@ -844,7 +861,7 @@ function HistoryDetailScreen({ entry, selected, custom, onBack, onHome }) {
   // Re-check against the current allergy list — the stored verdict is the
   // scan-time record, the banner below is the live one.
   const live = liveCheck(entry, selected, custom);
-  const currentCount = selected.length + custom.length;
+  const currentCount = selected.length;
   const oldBadge = VERDICT_BADGES[entry.verdict] || VERDICT_BADGES.failed;
 
   useEffect(() => {
@@ -958,8 +975,10 @@ export default function App() {
     }));
 
   // Save a scan to on-device history. Fire and forget: never blocks the UI.
-  // Total saved allergies, including custom ones.
-  const allergyCount = allergyState.selected.length + allergyState.custom.length;
+  // Active allergy count. Custom allergies store their id in `selected`
+  // when active, so `selected.length` already includes them — do NOT add
+  // custom.length (that double-counts).
+  const allergyCount = allergyState.selected.length;
   const goHome = () => setScreen('home');
 
   const persistScan = ({ text, source, file, matches, selectedCount, failed }) => {
