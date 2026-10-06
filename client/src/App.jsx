@@ -9,7 +9,7 @@ const OCR_TIMEOUT_MS = 90000;
 
 // Bump this on every release. It drives the header badge, the one-time
 // deploy confirmation, and the console launch log.
-const APP_VERSION = '1.2.0';
+const APP_VERSION = '1.2.1';
 
 function loadAllergyState() {
   try {
@@ -359,6 +359,7 @@ function ScanScreen({ onResult, onFailed, onBack }) {
   const [status, setStatus] = useState('idle'); // idle | reading | error
   const [errorKind, setErrorKind] = useState(null); // failed | empty
   const fileRef = useRef(null);
+  const cameraRef = useRef(null);
 
   const checkText = (text, source, file) => {
     const trimmed = (text || '').trim();
@@ -401,6 +402,7 @@ function ScanScreen({ onResult, onFailed, onBack }) {
     } finally {
       clearTimeout(timer);
       if (fileRef.current) fileRef.current.value = '';
+      if (cameraRef.current) cameraRef.current.value = '';
     }
   };
 
@@ -408,6 +410,8 @@ function ScanScreen({ onResult, onFailed, onBack }) {
     <div className="screen">
       <Header title="Scan ingredients" onBack={onBack} />
       <div className="stack">
+        {/* Library / file picker — no `capture`, so the OS offers the
+            photo picker instead of jumping straight to the camera. */}
         <input
           ref={fileRef}
           type="file"
@@ -416,8 +420,21 @@ function ScanScreen({ onResult, onFailed, onBack }) {
           id="photo-input"
           onChange={(e) => handleFile(e.target.files && e.target.files[0])}
         />
-        <label htmlFor="photo-input" className="bigbtn primary">
-          📷 Take / upload label photo
+        {/* Camera — `capture` hints the browser to open the camera directly. */}
+        <input
+          ref={cameraRef}
+          type="file"
+          accept="image/*"
+          capture="environment"
+          className="filehidden"
+          id="camera-input"
+          onChange={(e) => handleFile(e.target.files && e.target.files[0])}
+        />
+        <label htmlFor="camera-input" className="bigbtn primary">
+          📷 Take photo
+        </label>
+        <label htmlFor="photo-input" className="bigbtn secondary">
+          🖼️ Choose from library
         </label>
 
         {status === 'reading' && (
