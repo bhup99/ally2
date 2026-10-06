@@ -64,6 +64,20 @@ body {
   cursor: pointer;
 }
 .spacer { width: 40px; }
+.homebtn {
+  border: 1px solid var(--line);
+  background: var(--card);
+  border-radius: 10px;
+  height: 40px;
+  padding: 0 12px;
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--ink);
+  cursor: pointer;
+  white-space: nowrap;
+}
+.homebtn:active { transform: scale(0.97); }
+.ver { font-size: 11px; opacity: 0.45; font-weight: 400; }
 
 .hero { text-align: center; padding: 28px 0 8px; }
 .hero .logo { font-size: 3rem; }

@@ -9,7 +9,7 @@ const OCR_TIMEOUT_MS = 90000;
 
 // Bump this on every release. It drives the header badge, the one-time
 // deploy confirmation, and the console launch log.
-const APP_VERSION = '1.2.3';
+const APP_VERSION = '1.2.4';
 
 function loadAllergyState() {
   try {
@@ -63,17 +63,26 @@ function liveCheck(entry, selected, custom) {
 
 /* ------------------------------ small pieces ------------------------------ */
 
-function Header({ title, onBack }) {
+function Header({ title, onBack, onHome }) {
   return (
     <header className="topbar">
-      {onBack && (
+      {onBack ? (
         <button className="iconbtn" onClick={onBack} aria-label="Back">
           ←
         </button>
+      ) : (
+        <span className="spacer" />
       )}
-      <h1>{title}</h1>
-      <span className="spacer" />
-      <span style={{ fontSize: 11, opacity: 0.45, fontWeight: 400 }}>v{APP_VERSION}</span>
+      <h1>
+        {title} <span className="ver">v{APP_VERSION}</span>
+      </h1>
+      {onHome ? (
+        <button className="homebtn" onClick={onHome} aria-label="Go to home screen">
+          🏠 Home
+        </button>
+      ) : (
+        <span className="spacer" />
+      )}
     </header>
   );
 }
@@ -294,7 +303,7 @@ function DeployNote() {
   );
 }
 
-function AllergiesScreen({ selected, custom, onToggle, onAddCustom, onBack }) {
+function AllergiesScreen({ selected, custom, onToggle, onAddCustom, onBack, onHome }) {
   const [query, setQuery] = useState('');
   const [customLabel, setCustomLabel] = useState('');
   const [customSynonyms, setCustomSynonyms] = useState('');
@@ -327,7 +336,7 @@ function AllergiesScreen({ selected, custom, onToggle, onAddCustom, onBack }) {
 
   return (
     <div className="screen">
-      <Header title="Your allergies" onBack={onBack} />
+      <Header title="Your allergies" onBack={onBack} onHome={onHome} />
       <input
         className="search"
         type="search"
@@ -377,7 +386,7 @@ function AllergiesScreen({ selected, custom, onToggle, onAddCustom, onBack }) {
   );
 }
 
-function ScanScreen({ onResult, onFailed, onBack }) {
+function ScanScreen({ onResult, onFailed, onBack, onHome }) {
   const [typed, setTyped] = useState('');
   const [status, setStatus] = useState('idle'); // idle | reading | error
   const [errorKind, setErrorKind] = useState(null); // failed | empty
@@ -431,7 +440,7 @@ function ScanScreen({ onResult, onFailed, onBack }) {
 
   return (
     <div className="screen">
-      <Header title="Scan ingredients" onBack={onBack} />
+      <Header title="Scan ingredients" onBack={onBack} onHome={onHome} />
       <div className="stack">
         {/* Library / file picker — no `capture`, so the OS offers the
             photo picker instead of jumping straight to the camera. */}
@@ -502,13 +511,13 @@ function ScanScreen({ onResult, onFailed, onBack }) {
   );
 }
 
-function ResultScreen({ text, matches, selectedCount, onScanAgain, onEditAllergies }) {
+function ResultScreen({ text, matches, selectedCount, onScanAgain, onEditAllergies, onHome }) {
   const labels = matchedLabels(matches);
   const hasAllergies = selectedCount > 0;
 
   return (
     <div className="screen">
-      <Header title="Result" onBack={onScanAgain} />
+      <Header title="Result" onBack={onScanAgain} onHome={onHome} />
       <VerdictBanner
         verdict={computeVerdict(matches, selectedCount)}
         labels={labels}
@@ -537,7 +546,7 @@ function ResultScreen({ text, matches, selectedCount, onScanAgain, onEditAllergi
   );
 }
 
-function HistoryScreen({ selected, custom, onBack, onOpen }) {
+function HistoryScreen({ selected, custom, onBack, onOpen, onHome }) {
   const [entries, setEntries] = useState(null); // null = loading
   const [loadError, setLoadError] = useState(false);
 
@@ -568,7 +577,7 @@ function HistoryScreen({ selected, custom, onBack, onOpen }) {
 
   return (
     <div className="screen">
-      <Header title="Scan history" onBack={onBack} />
+      <Header title="Scan history" onBack={onBack} onHome={onHome} />
       {entries === null && !loadError && <p className="muted">Loading…</p>}
       {loadError && (
         <div className="card error" role="alert">
@@ -631,7 +640,7 @@ function HistoryScreen({ selected, custom, onBack, onOpen }) {
   );
 }
 
-function HistoryDetailScreen({ entry, selected, custom, onBack }) {
+function HistoryDetailScreen({ entry, selected, custom, onBack, onHome }) {
   const [imgUrl, setImgUrl] = useState(null);
   const [imgBroken, setImgBroken] = useState(false);
 
@@ -658,7 +667,7 @@ function HistoryDetailScreen({ entry, selected, custom, onBack }) {
 
   return (
     <div className="screen">
-      <Header title="Scan details" onBack={onBack} />
+      <Header title="Scan details" onBack={onBack} onHome={onHome} />
       <p className="muted">
         {new Date(entry.timestamp).toLocaleDateString(undefined, {
           weekday: 'short',
@@ -752,6 +761,10 @@ export default function App() {
     }));
 
   // Save a scan to on-device history. Fire and forget: never blocks the UI.
+  // Total saved allergies, including custom ones.
+  const allergyCount = allergyState.selected.length + allergyState.custom.length;
+  const goHome = () => setScreen('home');
+
   const persistScan = ({ text, source, file, matches, selectedCount, failed }) => {
     const entry = {
       id: newScanId(),
@@ -789,7 +802,7 @@ export default function App() {
       source,
       file: file || null,
       matches: m,
-      selectedCount: allergyState.selected.length,
+      selectedCount: allergyCount,
     });
   };
 
@@ -799,7 +812,7 @@ export default function App() {
       source: 'photo',
       file: file || null,
       matches: [],
-      selectedCount: allergyState.selected.length,
+      selectedCount: allergyCount,
       failed: true,
     });
   };
@@ -819,7 +832,7 @@ export default function App() {
       <DeployNote />
       {screen === 'home' && (
         <HomeScreen
-          selectedCount={allergyState.selected.length}
+          selectedCount={allergyCount}
           onAddAllergies={() => setScreen('allergies')}
           onScan={() => setScreen('scan')}
           onHistory={() => setScreen('history')}
@@ -832,6 +845,7 @@ export default function App() {
           onToggle={toggle}
           onAddCustom={addCustom}
           onBack={() => setScreen(result ? 'result' : 'home')}
+          onHome={goHome}
         />
       )}
       {screen === 'scan' && (
@@ -839,15 +853,17 @@ export default function App() {
           onResult={handleResult}
           onFailed={handleScanFailed}
           onBack={() => setScreen('home')}
+          onHome={goHome}
         />
       )}
       {screen === 'result' && result && (
         <ResultScreen
           text={result.text}
           matches={matches}
-          selectedCount={allergyState.selected.length}
+          selectedCount={allergyCount}
           onScanAgain={() => setScreen('scan')}
           onEditAllergies={() => setScreen('allergies')}
+          onHome={goHome}
         />
       )}
       {screen === 'history' && (
@@ -856,6 +872,7 @@ export default function App() {
           custom={allergyState.custom}
           onBack={() => setScreen('home')}
           onOpen={openDetail}
+          onHome={goHome}
         />
       )}
       {screen === 'detail' && detailEntry && (
@@ -864,6 +881,7 @@ export default function App() {
           selected={allergyState.selected}
           custom={allergyState.custom}
           onBack={() => setScreen('history')}
+          onHome={goHome}
         />
       )}
     </div>
