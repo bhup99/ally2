@@ -9,7 +9,7 @@ const OCR_TIMEOUT_MS = 90000;
 
 // Bump this on every release. It drives the header badge, the one-time
 // deploy confirmation, and the console launch log.
-const APP_VERSION = '1.2.2';
+const APP_VERSION = '1.2.3';
 
 function loadAllergyState() {
   try {
@@ -46,6 +46,20 @@ const VERDICT_BADGES = {
   'no-allergies-saved': { label: 'Not checked', cls: 'vbadge neutral' },
   failed: { label: 'Read failed', cls: 'vbadge muted' },
 };
+
+/* Re-check a stored history entry against the CURRENT allergy list, so old
+   entries stay truthful as the user adds more allergies. The stored verdict
+   remains the scan-time record; `changed` flags when the live result
+   differs from it. */
+function liveCheck(entry, selected, custom) {
+  if (!entry.extractedText) {
+    return { verdict: 'failed', labels: [], matches: [], changed: false };
+  }
+  const matches = findMatches(entry.extractedText, selected, custom);
+  const labels = [...new Set(matches.map((m) => m.label))];
+  const verdict = computeVerdict(matches, selected.length + custom.length);
+  return { verdict, labels, matches, changed: verdict !== entry.verdict };
+}
 
 /* ------------------------------ small pieces ------------------------------ */
 
@@ -523,7 +537,7 @@ function ResultScreen({ text, matches, selectedCount, onScanAgain, onEditAllergi
   );
 }
 
-function HistoryScreen({ onBack, onOpen }) {
+function HistoryScreen({ selected, custom, onBack, onOpen }) {
   const [entries, setEntries] = useState(null); // null = loading
   const [loadError, setLoadError] = useState(false);
 
@@ -571,7 +585,8 @@ function HistoryScreen({ onBack, onOpen }) {
         <>
           <div className="historylist">
             {entries.map((e) => {
-              const badge = VERDICT_BADGES[e.verdict] || VERDICT_BADGES.failed;
+              const live = liveCheck(e, selected, custom);
+              const badge = VERDICT_BADGES[live.verdict] || VERDICT_BADGES.failed;
               return (
                 <div key={e.id} className="historyrowwrap">
                   <button
@@ -616,9 +631,15 @@ function HistoryScreen({ onBack, onOpen }) {
   );
 }
 
-function HistoryDetailScreen({ entry, onBack }) {
+function HistoryDetailScreen({ entry, selected, custom, onBack }) {
   const [imgUrl, setImgUrl] = useState(null);
   const [imgBroken, setImgBroken] = useState(false);
+
+  // Re-check against the current allergy list — the stored verdict is the
+  // scan-time record, the banner below is the live one.
+  const live = liveCheck(entry, selected, custom);
+  const currentCount = selected.length + custom.length;
+  const oldBadge = VERDICT_BADGES[entry.verdict] || VERDICT_BADGES.failed;
 
   useEffect(() => {
     setImgBroken(false);
@@ -651,17 +672,30 @@ function HistoryDetailScreen({ entry, onBack }) {
         })}
       </p>
       <VerdictBanner
-        verdict={entry.verdict}
-        labels={entry.matchedAllergens || []}
-        selectedCount={entry.selectedCount || 0}
+        verdict={live.verdict}
+        labels={live.labels}
+        selectedCount={currentCount}
       />
-      {(entry.matchedAllergens || []).length > 0 && (
+      {live.changed && (
+        <div className="banner warn" role="note">
+          <h2>Result changed since scan</h2>
+          <p>
+            This showed “{oldBadge.label}” when you scanned it. Your allergy
+            list has changed since — the result above uses your current list.
+          </p>
+        </div>
+      )}
+      {live.labels.length > 0 && (
         <div className="matchchips">
-          {entry.matchedAllergens.map((l) => (
+          {live.labels.map((l) => (
             <span key={l} className="matchchip">⚠️ {l}</span>
           ))}
         </div>
       )}
+      <p className="rechecknote">
+        Re-checked against your current allergy list ({currentCount}{' '}
+        {currentCount === 1 ? 'allergy' : 'allergies'}).
+      </p>
       {imgUrl && !imgBroken && (
         <img
           className="detailimg"
@@ -674,7 +708,7 @@ function HistoryDetailScreen({ entry, onBack }) {
         <>
           <h3 className="sectiontitle">Label text</h3>
           <div className="card">
-            <HighlightedText text={entry.extractedText} matches={entry.matches || []} />
+            <HighlightedText text={entry.extractedText} matches={live.matches} />
           </div>
         </>
       ) : (
@@ -817,10 +851,20 @@ export default function App() {
         />
       )}
       {screen === 'history' && (
-        <HistoryScreen onBack={() => setScreen('home')} onOpen={openDetail} />
+        <HistoryScreen
+          selected={allergyState.selected}
+          custom={allergyState.custom}
+          onBack={() => setScreen('home')}
+          onOpen={openDetail}
+        />
       )}
       {screen === 'detail' && detailEntry && (
-        <HistoryDetailScreen entry={detailEntry} onBack={() => setScreen('history')} />
+        <HistoryDetailScreen
+          entry={detailEntry}
+          selected={allergyState.selected}
+          custom={allergyState.custom}
+          onBack={() => setScreen('history')}
+        />
       )}
     </div>
   );

@@ -180,6 +180,8 @@ label.bigbtn { cursor: pointer; }
 .banner.danger { background: var(--danger-bg); border: 2px solid var(--danger); color: var(--danger); }
 .banner.safe { background: var(--safe-bg); border: 2px solid var(--safe); color: var(--safe); }
 .banner.neutral { background: var(--neutral-bg); border: 2px solid var(--neutral); color: var(--neutral); }
+.banner.warn { background: #fffbeb; border: 2px solid #b45309; color: #92400e; text-align: left; }
+.rechecknote { color: var(--muted); font-size: 0.85rem; margin: 8px 2px 0; }
 
 .matchchips { display: flex; flex-wrap: wrap; gap: 8px; }
 .matchchip {
