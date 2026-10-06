@@ -12,7 +12,7 @@ const OCR_TIMEOUT_MS = 90000;
 
 // Bump this on every release. It drives the header badge, the one-time
 // deploy confirmation, and the console launch log.
-const APP_VERSION = '1.2.10';
+const APP_VERSION = '1.2.11';
 
 // Public support address shown on the home screen "Contact us" button.
 const SUPPORT_EMAIL = 'bhupeshkushwah99@gmail.com';
@@ -195,6 +195,11 @@ function isIOS() {
   );
 }
 
+function isAndroid() {
+  if (typeof navigator === 'undefined') return false;
+  return /android/i.test(navigator.userAgent || '');
+}
+
 function isStandalone() {
   if (typeof window === 'undefined') return false;
   return (
@@ -268,19 +273,30 @@ function HomeScreen({ selectedCount, onAddAllergies, onScan, onHistory, onContac
 }
 
 // Permanent install instructions at the bottom of the home page —
-// how to save the site as an app for quick visits on Android and iPhone.
+// how to save the site as an app. Shows only the instructions matching the
+// visitor's device (Android or iPhone) to keep it compact; desktop visitors
+// see both. Hidden entirely once the app is already installed.
 function InstallFooter() {
+  if (isStandalone()) return null;
+  const ios = isIOS();
+  const android = isAndroid();
+  const showAndroid = android || (!ios && !android);
+  const showIOS = ios || (!ios && !android);
   return (
     <footer className="installfooter">
       <h3>📲 Save this as an app</h3>
-      <p>
-        <b>Android (Chrome):</b> tap the <b>⋮</b> menu →{' '}
-        <b>Add to Home screen</b> (or <b>Install app</b>) → Add.
-      </p>
-      <p>
-        <b>iPhone (Safari):</b> tap <b>Share</b> (square with an arrow) →{' '}
-        <b>Add to Home Screen</b> → Add.
-      </p>
+      {showAndroid && (
+        <p>
+          <b>Android (Chrome):</b> tap the <b>⋮</b> menu →{' '}
+          <b>Add to Home screen</b> (or <b>Install app</b>) → Add.
+        </p>
+      )}
+      {showIOS && (
+        <p>
+          <b>iPhone (Safari):</b> tap <b>Share</b> (square with an arrow) →{' '}
+          <b>Add to Home Screen</b> → Add.
+        </p>
+      )}
       <p className="muted" style={{ marginBottom: 0 }}>
         It then opens full-screen from your home screen, just like a native app.
       </p>
