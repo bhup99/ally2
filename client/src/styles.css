@@ -166,6 +166,38 @@ label.btn { cursor: pointer; }
 }
 .card h3 { margin: 0; font-size: 1rem; }
 .card.error { border-color: #fca5a5; background: var(--danger-bg); }
+.card.warn { border-color: #fcd34d; background: #fffbeb; }
+.card.warn p { margin: 0; color: #92400e; }
+.muted.small { font-size: 0.85rem; }
+
+/* Label-language picker on the scan screen. */
+.langpicker { display: flex; gap: 8px; flex-wrap: wrap; }
+.langpill {
+  border: 2px solid var(--line);
+  background: var(--card);
+  border-radius: 999px;
+  padding: 8px 16px;
+  font-size: 0.95rem;
+  cursor: pointer;
+  color: var(--ink);
+}
+.langpill.active {
+  border-color: var(--teal);
+  background: var(--teal);
+  color: #fff;
+  font-weight: 600;
+}
+
+/* Inline text button (e.g. "Show original"). */
+.linkbtn {
+  background: none;
+  border: none;
+  padding: 0;
+  color: var(--teal-dark);
+  font-size: inherit;
+  text-decoration: underline;
+  cursor: pointer;
+}
 .card.reading { align-items: center; text-align: center; }
 
 .spinner {

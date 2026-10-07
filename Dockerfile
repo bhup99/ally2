@@ -26,13 +26,17 @@ RUN npm ci --omit=dev && npm cache clean --force
 COPY server/index.js ./
 COPY --from=client-build /app/client/dist /app/client/dist
 
-# Bake the English OCR model into the image so the first /api/ocr request
+# Bake the OCR language models into the image so the first /api/ocr request
 # never downloads anything. tesseract.js v6 defaults to LSTM_ONLY, so it
-# fetches eng.traineddata.gz from the 4.0.0_best_int set on jsDelivr and
-# caches it as ./eng.traineddata relative to the process working directory.
+# fetches <lang>.traineddata.gz from the 4.0.0_best_int set on jsDelivr and
+# caches it as ./<lang>.traineddata relative to the process working directory.
 ADD https://cdn.jsdelivr.net/npm/@tesseract.js-data/eng/4.0.0_best_int/eng.traineddata.gz /tmp/eng.traineddata.gz
-RUN node --input-type=module -e "import {createReadStream,createWriteStream,statSync} from 'node:fs';import {createGunzip} from 'node:zlib';import {pipeline} from 'node:stream/promises';await pipeline(createReadStream('/tmp/eng.traineddata.gz'),createGunzip(),createWriteStream('/app/server/eng.traineddata'));const s=statSync('/app/server/eng.traineddata');if(s.size<1000000)throw new Error('traineddata looks truncated: '+s.size);console.log('eng.traineddata baked in ('+s.size+' bytes)');" \
-  && rm /tmp/eng.traineddata.gz
+ADD https://cdn.jsdelivr.net/npm/@tesseract.js-data/spa/4.0.0_best_int/spa.traineddata.gz /tmp/spa.traineddata.gz
+ADD https://cdn.jsdelivr.net/npm/@tesseract.js-data/kor/4.0.0_best_int/kor.traineddata.gz /tmp/kor.traineddata.gz
+RUN for lang in eng spa kor; do \
+      node --input-type=module -e "import {createReadStream,createWriteStream,statSync} from 'node:fs';import {createGunzip} from 'node:zlib';import {pipeline} from 'node:stream/promises';await pipeline(createReadStream('/tmp/${lang}.traineddata.gz'),createGunzip(),createWriteStream('/app/server/${lang}.traineddata'));const s=statSync('/app/server/${lang}.traineddata');if(s.size<1000000)throw new Error('traineddata looks truncated: '+s.size);console.log('${lang}.traineddata baked in ('+s.size+' bytes)');" \
+      && rm /tmp/${lang}.traineddata.gz; \
+    done
 
 # Run as a non-root user.
 RUN useradd --create-home --shell /usr/sbin/nologin appuser \

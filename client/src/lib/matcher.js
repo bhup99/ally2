@@ -65,3 +65,26 @@ export function matchedLabels(matches) {
   }
   return seen;
 }
+
+/**
+ * Group the user's selected allergy keywords as [{id, label, terms}] for
+ * server-side translation into a label language (the "match the original
+ * text" safety net). Capped so the translation call stays small.
+ */
+export function buildTermGroups(selectedIds, customAllergens = []) {
+  const byId = new Map();
+  for (const a of ALLERGENS) byId.set(a.id, a);
+  for (const c of customAllergens) byId.set(c.id, c);
+  const groups = [];
+  for (const id of selectedIds || []) {
+    const allergen = byId.get(id);
+    if (!allergen) continue;
+    const terms = [
+      ...new Set(
+        (allergen.terms || []).filter((t) => t && t.trim()).map((t) => t.trim())
+      ),
+    ].slice(0, 12);
+    if (terms.length) groups.push({ id, label: allergen.label, terms });
+  }
+  return groups.slice(0, 60);
+}

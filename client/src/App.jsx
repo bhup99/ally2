@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { ALLERGENS } from './data/allergens.js';
-import { findMatches, matchedLabels } from './lib/matcher.js';
+import { findMatches, matchedLabels, buildTermGroups } from './lib/matcher.js';
 import { saveScan, listScans, deleteScan, clearScans } from './lib/db.js';
 import { downscaleImage } from './lib/image.js';
 
@@ -12,7 +12,7 @@ const OCR_TIMEOUT_MS = 90000;
 
 // Bump this on every release. It drives the header badge, the one-time
 // deploy confirmation, and the console launch log.
-const APP_VERSION = '1.2.12';
+const APP_VERSION = '1.3.0';
 
 // Public support address shown on the home screen "Contact us" button.
 const SUPPORT_EMAIL = 'bhupeshkushwah99@gmail.com';
@@ -70,15 +70,46 @@ const VERDICT_BADGES = {
 /* Re-check a stored history entry against the CURRENT allergy list, so old
    entries stay truthful as the user adds more allergies. The stored verdict
    remains the scan-time record; `changed` flags when the live result
-   differs from it. */
+   differs from it. For non-English scans the stored text is the English
+   translation; when translated keywords were saved we also re-match the
+   original text as a safety net. */
 function liveCheck(entry, selected, custom) {
   if (!entry.extractedText) {
-    return { verdict: 'failed', labels: [], matches: [], changed: false };
+    return { verdict: 'failed', labels: [], matches: [], nativeMatches: [], changed: false };
   }
   const matches = findMatches(entry.extractedText, selected, custom);
-  const labels = [...new Set(matches.map((m) => m.label))];
-  const verdict = computeVerdict(matches, selected.length);
-  return { verdict, labels, matches, changed: verdict !== entry.verdict };
+  let nativeMatches = [];
+  if (entry.lang && entry.lang !== 'eng' && entry.keywordGroups && entry.originalText) {
+    nativeMatches = findMatches(entry.originalText, selected, entry.keywordGroups);
+  }
+  const all = [...matches, ...nativeMatches];
+  const labels = [...new Set(all.map((m) => m.label))];
+  const verdict = computeVerdict(all, selected.length);
+  return { verdict, labels, matches, nativeMatches, changed: verdict !== entry.verdict };
+}
+
+// Label languages the scanner supports (tesseract codes).
+const OCR_LANGS = [
+  { code: 'eng', label: 'English' },
+  { code: 'spa', label: 'Español' },
+  { code: 'kor', label: '한국어' },
+];
+const langName = (code) => (OCR_LANGS.find((l) => l.code === code) || OCR_LANGS[0]).label;
+
+/* Match a scan result. `ocr` is the /api/ocr payload:
+   { text, textEn, lang, translated, keywordGroups }.
+   Primary matching runs on the English text; for non-English labels we ALSO
+   match the original text with the translated allergen keywords, so a
+   garbled translation can't silently hide an allergen. Returns
+   { enMatches, nativeMatches, allMatches }. */
+function analyzeOcr(ocr, selected, custom) {
+  const textEn = ocr.textEn || ocr.text || '';
+  const enMatches = findMatches(textEn, selected, custom);
+  let nativeMatches = [];
+  if (ocr.lang && ocr.lang !== 'eng' && ocr.keywordGroups && ocr.keywordGroups.length && ocr.text) {
+    nativeMatches = findMatches(ocr.text, selected, ocr.keywordGroups);
+  }
+  return { enMatches, nativeMatches, allMatches: [...enMatches, ...nativeMatches] };
 }
 
 /* ------------------------------ small pieces ------------------------------ */
@@ -616,10 +647,11 @@ function AllergiesScreen({ selected, custom, onToggle, onAddCustom, onBack, onHo
   );
 }
 
-function ScanScreen({ onResult, onFailed, onBack, onHome }) {
+function ScanScreen({ onResult, onFailed, onBack, onHome, termGroups }) {
   const [typed, setTyped] = useState('');
   const [status, setStatus] = useState('idle'); // idle | reading | error
   const [errorKind, setErrorKind] = useState(null); // failed | empty
+  const [lang, setLang] = useState('eng'); // tesseract code for the label language
   const fileRef = useRef(null);
   const cameraRef = useRef(null);
 
@@ -630,7 +662,11 @@ function ScanScreen({ onResult, onFailed, onBack, onHome }) {
       setErrorKind('empty');
       return;
     }
-    onResult(trimmed, source, file || null);
+    onResult(
+      { text: trimmed, textEn: trimmed, lang: 'eng', translated: false, keywordGroups: null },
+      source,
+      file || null
+    );
   };
 
   const handleFile = async (file) => {
@@ -642,6 +678,10 @@ function ScanScreen({ onResult, onFailed, onBack, onHome }) {
     try {
       const form = new FormData();
       form.append('image', file);
+      form.append('lang', lang);
+      if (termGroups && termGroups.length) {
+        form.append('termGroups', JSON.stringify(termGroups));
+      }
       const res = await fetch('/api/ocr', {
         method: 'POST',
         body: form,
@@ -656,7 +696,17 @@ function ScanScreen({ onResult, onFailed, onBack, onHome }) {
         onFailed(file);
         return;
       }
-      checkText(text, 'photo', file);
+      onResult(
+        {
+          text,
+          textEn: (data.textEn || text).trim() || text,
+          lang: data.lang || 'eng',
+          translated: !!data.translated,
+          keywordGroups: Array.isArray(data.keywordGroups) ? data.keywordGroups : null,
+        },
+        'photo',
+        file
+      );
     } catch {
       setStatus('error');
       setErrorKind('failed');
@@ -672,6 +722,24 @@ function ScanScreen({ onResult, onFailed, onBack, onHome }) {
     <div className="screen">
       <Header title="Scan ingredients" onBack={onBack} onHome={onHome} />
       <div className="stack">
+        <span className="fieldlabel">Label language</span>
+        <div className="langpicker" role="group" aria-label="Label language">
+          {OCR_LANGS.map((l) => (
+            <button
+              key={l.code}
+              type="button"
+              className={lang === l.code ? 'langpill active' : 'langpill'}
+              onClick={() => setLang(l.code)}
+            >
+              {l.label}
+            </button>
+          ))}
+        </div>
+        {lang !== 'eng' && (
+          <p className="muted small">
+            We'll translate the label to English using a free translation service.
+          </p>
+        )}
         {/* Library / file picker — no `capture`, so the OS offers the
             photo picker instead of jumping straight to the camera. */}
         <input
@@ -741,15 +809,20 @@ function ScanScreen({ onResult, onFailed, onBack, onHome }) {
   );
 }
 
-function ResultScreen({ text, matches, selectedCount, onScanAgain, onEditAllergies, onHome }) {
-  const labels = matchedLabels(matches);
+function ResultScreen({ result, analysis, selectedCount, onScanAgain, onEditAllergies, onHome }) {
+  const { enMatches, nativeMatches, allMatches } = analysis;
+  const labels = matchedLabels(allMatches);
   const hasAllergies = selectedCount > 0;
+  const isTranslated = result.lang && result.lang !== 'eng';
+  const [showOriginal, setShowOriginal] = useState(false);
+  const shownText = showOriginal && result.originalText ? result.originalText : result.text;
+  const shownMatches = showOriginal ? nativeMatches : enMatches;
 
   return (
     <div className="screen">
       <Header title="Result" onBack={onScanAgain} onHome={onHome} />
       <VerdictBanner
-        verdict={computeVerdict(matches, selectedCount)}
+        verdict={computeVerdict(allMatches, selectedCount)}
         labels={labels}
         selectedCount={selectedCount}
       />
@@ -760,9 +833,26 @@ function ResultScreen({ text, matches, selectedCount, onScanAgain, onEditAllergi
           ))}
         </div>
       )}
+      {isTranslated && !result.translated && (
+        <div className="card warn" role="alert">
+          <p>
+            <strong>We couldn't translate this label.</strong> Please check the
+            original text carefully before eating.
+          </p>
+        </div>
+      )}
       <h3 className="sectiontitle">Label text</h3>
+      {isTranslated && (
+        <p className="muted small">
+          Translated from {langName(result.lang)}
+          {' · '}
+          <button type="button" className="linkbtn" onClick={() => setShowOriginal((v) => !v)}>
+            {showOriginal ? 'Show English' : 'Show original'}
+          </button>
+        </p>
+      )}
       <div className="card">
-        <HighlightedText text={text} matches={matches} />
+        <HighlightedText text={shownText} matches={shownMatches} />
       </div>
       <div className="stack">
         <button className="bigbtn secondary" onClick={onScanAgain}>
@@ -873,12 +963,16 @@ function HistoryScreen({ selected, custom, onBack, onOpen, onHome }) {
 function HistoryDetailScreen({ entry, selected, custom, onBack, onHome }) {
   const [imgUrl, setImgUrl] = useState(null);
   const [imgBroken, setImgBroken] = useState(false);
+  const [showOriginal, setShowOriginal] = useState(false);
 
   // Re-check against the current allergy list — the stored verdict is the
   // scan-time record, the banner below is the live one.
   const live = liveCheck(entry, selected, custom);
   const currentCount = selected.length;
   const oldBadge = VERDICT_BADGES[entry.verdict] || VERDICT_BADGES.failed;
+  const isTranslated = entry.lang && entry.lang !== 'eng' && entry.originalText;
+  const shownText = showOriginal && entry.originalText ? entry.originalText : entry.extractedText;
+  const shownMatches = showOriginal ? live.nativeMatches : live.matches;
 
   useEffect(() => {
     setImgBroken(false);
@@ -946,8 +1040,17 @@ function HistoryDetailScreen({ entry, selected, custom, onBack, onHome }) {
       {entry.extractedText ? (
         <>
           <h3 className="sectiontitle">Label text</h3>
+          {isTranslated && (
+            <p className="muted small">
+              Translated from {langName(entry.lang)}
+              {' · '}
+              <button type="button" className="linkbtn" onClick={() => setShowOriginal((v) => !v)}>
+                {showOriginal ? 'Show English' : 'Show original'}
+              </button>
+            </p>
+          )}
           <div className="card">
-            <HighlightedText text={entry.extractedText} matches={live.matches} />
+            <HighlightedText text={shownText} matches={shownMatches} />
           </div>
         </>
       ) : (
@@ -997,13 +1100,17 @@ export default function App() {
   const allergyCount = allergyState.selected.length;
   const goHome = () => setScreen('home');
 
-  const persistScan = ({ text, source, file, matches, selectedCount, failed }) => {
+  const persistScan = ({ text, originalText, lang, translated, keywordGroups, source, file, matches, selectedCount, failed }) => {
     const entry = {
       id: newScanId(),
       timestamp: Date.now(),
       source,
       image: null,
       extractedText: text,
+      originalText: originalText || null,
+      lang: lang || 'eng',
+      translated: !!translated,
+      keywordGroups: keywordGroups || null,
       matchedAllergens: matchedLabels(matches),
       matches,
       selectedCount,
@@ -1025,15 +1132,26 @@ export default function App() {
     })();
   };
 
-  const handleResult = (text, source, file) => {
-    const m = findMatches(text, allergyState.selected, allergyState.custom);
-    setResult({ text, source });
+  const handleResult = (ocr, source, file) => {
+    const { allMatches } = analyzeOcr(ocr, allergyState.selected, allergyState.custom);
+    setResult({
+      text: ocr.textEn,
+      originalText: ocr.text,
+      lang: ocr.lang,
+      translated: ocr.translated,
+      keywordGroups: ocr.keywordGroups,
+      source,
+    });
     setScreen('result');
     persistScan({
-      text,
+      text: ocr.textEn,
+      originalText: ocr.lang !== 'eng' ? ocr.text : null,
+      lang: ocr.lang,
+      translated: ocr.translated,
+      keywordGroups: ocr.keywordGroups,
       source,
       file: file || null,
-      matches: m,
+      matches: allMatches,
       selectedCount: allergyCount,
     });
   };
@@ -1049,10 +1167,28 @@ export default function App() {
     });
   };
 
-  const matches = useMemo(() => {
-    if (!result) return [];
-    return findMatches(result.text, allergyState.selected, allergyState.custom);
+  // Live analysis of the current result: English matches for highlighting,
+  // plus native-language matches (safety net) for the verdict. Re-runs when
+  // the allergy list changes so edits reflect immediately.
+  const analysis = useMemo(() => {
+    if (!result) return { enMatches: [], nativeMatches: [], allMatches: [] };
+    return analyzeOcr(
+      {
+        textEn: result.text,
+        text: result.originalText || result.text,
+        lang: result.lang || 'eng',
+        keywordGroups: result.keywordGroups || null,
+      },
+      allergyState.selected,
+      allergyState.custom
+    );
   }, [result, allergyState]);
+
+  // Translated allergy keywords for the "match the original text" safety net.
+  const termGroups = useMemo(
+    () => buildTermGroups(allergyState.selected, allergyState.custom),
+    [allergyState]
+  );
 
   const openDetail = (entry) => {
     setDetailEntry(entry);
@@ -1087,12 +1223,13 @@ export default function App() {
           onFailed={handleScanFailed}
           onBack={() => setScreen('home')}
           onHome={goHome}
+          termGroups={termGroups}
         />
       )}
       {screen === 'result' && result && (
         <ResultScreen
-          text={result.text}
-          matches={matches}
+          result={result}
+          analysis={analysis}
           selectedCount={allergyCount}
           onScanAgain={() => setScreen('scan')}
           onEditAllergies={() => setScreen('allergies')}

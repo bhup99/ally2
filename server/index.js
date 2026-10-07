@@ -54,16 +54,95 @@ const upload = multer({
   },
 });
 
-// Lazily-created, reused OCR worker (loads the English model once).
-let workerPromise = null;
-function getWorker() {
-  if (!workerPromise) {
-    workerPromise = createWorker('eng').catch((err) => {
-      workerPromise = null; // allow retry on next request
+// Languages the OCR endpoint supports (tesseract codes), with the matching
+// MyMemory translation API codes.
+const OCR_LANGS = {
+  eng: { name: 'English', api: 'en' },
+  spa: { name: 'Spanish', api: 'es' },
+  kor: { name: 'Korean', api: 'ko' },
+};
+
+// Lazily-created, reused OCR workers — one per language, so each model
+// loads only once no matter how many scans come in.
+const workerPool = new Map();
+function getWorker(lang) {
+  const code = OCR_LANGS[lang] ? lang : 'eng';
+  if (!workerPool.has(code)) {
+    const p = createWorker(code).catch((err) => {
+      workerPool.delete(code); // allow retry on next request
       throw err;
     });
+    workerPool.set(code, p);
   }
-  return workerPromise;
+  return workerPool.get(code);
+}
+
+const TRANSLATE_TIMEOUT_MS = 12000;
+
+// Translate text to English via the free MyMemory API (no key needed).
+// Never throws: on any failure we fall back to the original text and the
+// caller flags the result so the UI can warn instead of silently trusting it.
+async function translateToEnglish(text, lang) {
+  if (lang === 'eng' || !text) return { textEn: text, translated: false };
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), TRANSLATE_TIMEOUT_MS);
+  try {
+    const pair = `${OCR_LANGS[lang].api}|en`;
+    const url = `https://api.mymemory.translated.net/get?q=${encodeURIComponent(text)}&langpair=${pair}`;
+    const res = await fetch(url, { signal: controller.signal });
+    if (!res.ok) throw new Error(`translate http ${res.status}`);
+    const data = await res.json();
+    const out = (data && data.responseData && data.responseData.translatedText || '').trim();
+    if (!out) throw new Error('empty translation');
+    return { textEn: out, translated: true };
+  } catch (err) {
+    console.warn('Translation to English failed:', err && err.message ? err.message : err);
+    return { textEn: text, translated: false };
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+// Translate allergy keywords into the label language so the client can ALSO
+// match against the original (untranslated) OCR text — a safety net for when
+// the full-text translation garbles an ingredient name. `groups` is
+// [{id, label, terms}]; the terms are newline-joined into one batched call
+// and split back. If the lines don't align 1:1 we return null (skip the
+// safety net) rather than match against misaligned keywords.
+async function translateKeywords(groups, lang) {
+  if (lang === 'eng' || !groups.length) return null;
+  const flat = [];
+  const counts = [];
+  for (const g of groups) {
+    const terms = (g.terms || []).filter((t) => typeof t === 'string' && t.trim()).slice(0, 12);
+    counts.push(terms.length);
+    flat.push(...terms);
+  }
+  if (!flat.length) return null;
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), TRANSLATE_TIMEOUT_MS);
+  try {
+    const pair = `en|${OCR_LANGS[lang].api}`;
+    const url = `https://api.mymemory.translated.net/get?q=${encodeURIComponent(flat.join('\n'))}&langpair=${pair}`;
+    const res = await fetch(url, { signal: controller.signal });
+    if (!res.ok) throw new Error(`translate http ${res.status}`);
+    const data = await res.json();
+    const out = (data && data.responseData && data.responseData.translatedText || '').trim();
+    const lines = out.split('\n').map((s) => s.trim());
+    if (lines.length !== flat.length) throw new Error('keyword alignment broke');
+    const regrouped = [];
+    let i = 0;
+    groups.forEach((g, gi) => {
+      regrouped.push({ id: g.id, label: g.label, terms: lines.slice(i, i + counts[gi]) });
+      i += counts[gi];
+    });
+    return regrouped;
+  } catch (err) {
+    console.warn('Keyword translation failed:', err && err.message ? err.message : err);
+    return null;
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 app.get('/api/health', (_req, res) => {
@@ -95,15 +174,38 @@ app.get('/.well-known/assetlinks.json', (_req, res) => {
   ]);
 });
 
-// POST /api/ocr  (multipart form, field name: "image")
+// POST /api/ocr  (multipart form, fields: "image", optional "lang", optional "termGroups")
+// "lang" is a tesseract code: eng (default), spa, kor.
+// "termGroups" is JSON [{id, label, terms}] — the user's allergy keywords,
+// translated into the label language so the client can also match the
+// original text as a safety net. Response:
+// { text, textEn, lang, translated, keywordGroups }
 app.post('/api/ocr', ocrLimiter, upload.single('image'), async (req, res) => {
   if (!req.file) {
     return res.status(400).json({ error: 'NO_IMAGE' });
   }
+  const lang = OCR_LANGS[req.body.lang] ? req.body.lang : OCR_LANGS[req.query.lang] ? req.query.lang : 'eng';
+  let termGroups = [];
   try {
-    const worker = await getWorker();
+    const parsed = JSON.parse(req.body.termGroups || '[]');
+    if (Array.isArray(parsed)) {
+      termGroups = parsed
+        .filter((g) => g && typeof g.id === 'string' && Array.isArray(g.terms))
+        .slice(0, 60)
+        .map((g) => ({ id: g.id, label: typeof g.label === 'string' ? g.label : g.id, terms: g.terms }));
+    }
+  } catch {
+    // malformed termGroups -> just skip the keyword safety net
+  }
+  try {
+    const worker = await getWorker(lang);
     const { data } = await worker.recognize(req.file.buffer);
-    res.json({ text: (data.text || '').trim() });
+    const text = (data.text || '').trim();
+    const [{ textEn, translated }, keywordGroups] = await Promise.all([
+      translateToEnglish(text, lang),
+      translateKeywords(termGroups, lang),
+    ]);
+    res.json({ text, textEn, lang, translated, keywordGroups });
   } catch (err) {
     console.error('OCR failed:', err && err.message ? err.message : err);
     res.status(500).json({ error: 'OCR_FAILED' });
@@ -142,8 +244,8 @@ function shutdown(signal) {
   server.close(() => process.exit(0));
   // Don't hang forever if a scan is mid-flight.
   setTimeout(() => process.exit(1), 10000).unref();
-  if (workerPromise) {
-    workerPromise.then((w) => w.terminate()).catch(() => {});
+  for (const p of workerPool.values()) {
+    p.then((w) => w.terminate()).catch(() => {});
   }
 }
 process.on('SIGTERM', () => shutdown('SIGTERM'));
