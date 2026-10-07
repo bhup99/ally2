@@ -78,28 +78,86 @@ function getWorker(lang) {
 }
 
 const TRANSLATE_TIMEOUT_MS = 12000;
+// MyMemory's free tier rejects queries over 500 chars — chunk below that.
+const TRANSLATE_CHUNK_LEN = 450;
 
-// Translate text to English via the free MyMemory API (no key needed).
-// Never throws: on any failure we fall back to the original text and the
-// caller flags the result so the UI can warn instead of silently trusting it.
-async function translateToEnglish(text, lang) {
-  if (lang === 'eng' || !text) return { textEn: text, translated: false };
+// Pull the translated string out of a MyMemory response, or null when the
+// API rejected the query. NOTE: MyMemory returns HTTP 200 even for errors
+// (e.g. "QUERY LENGTH LIMIT EXCEEDED" arrives inside translatedText with
+// responseStatus "403"), so the HTTP status alone is not enough — without
+// this check the error message itself would be shown as the "translation".
+function extractTranslation(data) {
+  if (!data || String(data.responseStatus) !== '200') return null;
+  const out = (data.responseData && data.responseData.translatedText || '').trim();
+  if (!out || /QUERY LENGTH LIMIT EXCEEDED/i.test(out)) return null;
+  return out;
+}
+
+// One translation request. Throws on any rejection so callers can fall back.
+async function fetchTranslation(text, pair) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), TRANSLATE_TIMEOUT_MS);
   try {
-    const pair = `${OCR_LANGS[lang].api}|en`;
     const url = `https://api.mymemory.translated.net/get?q=${encodeURIComponent(text)}&langpair=${pair}`;
     const res = await fetch(url, { signal: controller.signal });
-    if (!res.ok) throw new Error(`translate http ${res.status}`);
-    const data = await res.json();
-    const out = (data && data.responseData && data.responseData.translatedText || '').trim();
-    if (!out) throw new Error('empty translation');
-    return { textEn: out, translated: true };
+    const data = await res.json().catch(() => null);
+    const out = extractTranslation(data);
+    if (!res.ok || !out) {
+      throw new Error(`translation rejected (${(data && data.responseDetails) || `http ${res.status}`})`);
+    }
+    return out;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+// Split text into <= maxLen chunks on word boundaries (hard-splitting any
+// single word that alone exceeds the limit).
+function chunkText(text, maxLen) {
+  const chunks = [];
+  let cur = '';
+  const push = (s) => {
+    if (s) chunks.push(s);
+  };
+  for (const word of String(text).split(/\s+/).filter(Boolean)) {
+    let w = word;
+    while (w.length > maxLen) {
+      if (cur) {
+        push(cur);
+        cur = '';
+      }
+      push(w.slice(0, maxLen));
+      w = w.slice(maxLen);
+    }
+    if ((cur ? cur.length + 1 : 0) + w.length > maxLen) {
+      push(cur);
+      cur = w;
+    } else {
+      cur = cur ? `${cur} ${w}` : w;
+    }
+  }
+  push(cur);
+  return chunks;
+}
+
+// Translate text to English via the free MyMemory API (no key needed).
+// Long labels are translated chunk by chunk. Never throws: on any failure
+// we fall back to the original text and the caller flags the result so the
+// UI can warn instead of silently trusting it.
+async function translateToEnglish(text, lang) {
+  if (lang === 'eng' || !text) return { textEn: text, translated: false };
+  try {
+    const pair = `${OCR_LANGS[lang].api}|en`;
+    const parts = [];
+    for (const chunk of chunkText(text, TRANSLATE_CHUNK_LEN)) {
+      parts.push(await fetchTranslation(chunk, pair));
+    }
+    const textEn = parts.join(' ').trim();
+    if (!textEn) throw new Error('empty translation');
+    return { textEn, translated: true };
   } catch (err) {
     console.warn('Translation to English failed:', err && err.message ? err.message : err);
     return { textEn: text, translated: false };
-  } finally {
-    clearTimeout(timer);
   }
 }
 
@@ -119,17 +177,30 @@ async function translateKeywords(groups, lang) {
     flat.push(...terms);
   }
   if (!flat.length) return null;
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), TRANSLATE_TIMEOUT_MS);
+  // The 500-char limit applies here too: split the term list into chunks
+  // that each fit, keeping newline alignment within every chunk.
+  const termChunks = [];
+  let cur = [];
+  let curLen = 0;
+  for (const t of flat) {
+    if (cur.length && curLen + 1 + t.length > TRANSLATE_CHUNK_LEN) {
+      termChunks.push(cur);
+      cur = [];
+      curLen = 0;
+    }
+    cur.push(t);
+    curLen += (cur.length > 1 ? 1 : 0) + t.length;
+  }
+  if (cur.length) termChunks.push(cur);
   try {
     const pair = `en|${OCR_LANGS[lang].api}`;
-    const url = `https://api.mymemory.translated.net/get?q=${encodeURIComponent(flat.join('\n'))}&langpair=${pair}`;
-    const res = await fetch(url, { signal: controller.signal });
-    if (!res.ok) throw new Error(`translate http ${res.status}`);
-    const data = await res.json();
-    const out = (data && data.responseData && data.responseData.translatedText || '').trim();
-    const lines = out.split('\n').map((s) => s.trim());
-    if (lines.length !== flat.length) throw new Error('keyword alignment broke');
+    const lines = [];
+    for (const tc of termChunks) {
+      const out = await fetchTranslation(tc.join('\n'), pair);
+      const parts = out.split('\n').map((s) => s.trim());
+      if (parts.length !== tc.length) throw new Error('keyword alignment broke');
+      lines.push(...parts);
+    }
     const regrouped = [];
     let i = 0;
     groups.forEach((g, gi) => {
@@ -140,8 +211,6 @@ async function translateKeywords(groups, lang) {
   } catch (err) {
     console.warn('Keyword translation failed:', err && err.message ? err.message : err);
     return null;
-  } finally {
-    clearTimeout(timer);
   }
 }
 
