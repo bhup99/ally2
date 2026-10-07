@@ -12,7 +12,7 @@ const OCR_TIMEOUT_MS = 90000;
 
 // Bump this on every release. It drives the header badge, the one-time
 // deploy confirmation, and the console launch log.
-const APP_VERSION = '1.2.11';
+const APP_VERSION = '1.2.12';
 
 // Public support address shown on the home screen "Contact us" button.
 const SUPPORT_EMAIL = 'bhupeshkushwah99@gmail.com';
@@ -247,7 +247,7 @@ function HomeScreen({ selectedCount, onAddAllergies, onScan, onHistory, onContac
     <div className="screen">
       <div className="hero">
         <div className="logo">🔍</div>
-        <h2>Allergy Scanner</h2>
+        <h2>EatFearless</h2>
         <p className="muted">Scan a label, spot your allergens. No account needed.</p>
       </div>
       <div className="stack">
@@ -345,7 +345,7 @@ function ContactScreen({ onBack, onHome }) {
 
   const mailtoFallback =
     `mailto:${SUPPORT_EMAIL}` +
-    `?subject=${encodeURIComponent(`Allergy Scanner feedback: ${title.trim() || '…'}`)}` +
+    `?subject=${encodeURIComponent(`EatFearless feedback: ${title.trim() || '…'}`)}` +
     `&body=${encodeURIComponent(
       `Name: ${name.trim() || '(not given)'}\n\n${description.trim()}\n\nAnything else: ${extra.trim() || '—'}`
     )}`;
@@ -365,7 +365,7 @@ function ContactScreen({ onBack, onHome }) {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
         body: JSON.stringify({
-          _subject: `Allergy Scanner feedback: ${title.trim()}`,
+          _subject: `EatFearless feedback: ${title.trim()}`,
           _template: 'table',
           _captcha: 'false',
           Name: name.trim() || '(not given)',
@@ -504,7 +504,7 @@ function DeployNote() {
 
   useEffect(() => {
     console.log(
-      `%c[Allergy Scanner] v${APP_VERSION} — deployed from GitHub`,
+      `%c[EatFearless] v${APP_VERSION} — deployed from GitHub`,
       'color:#0e7c66;font-weight:bold'
     );
     let seen = false;

@@ -132,7 +132,7 @@ app.get('*', (req, res, next) => {
 });
 
 const server = app.listen(PORT, () => {
-  console.log(`Allergy Scanner API listening on http://localhost:${PORT}`);
+  console.log(`EatFearless API listening on http://localhost:${PORT}`);
 });
 
 // Graceful shutdown: stop accepting connections, terminate the OCR worker,
