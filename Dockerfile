@@ -2,8 +2,11 @@
 FROM node:20-alpine AS client-build
 WORKDIR /app/client
 
-COPY client/package.json client/package-lock.json ./
-RUN npm ci
+# NOTE: intentionally no package-lock.json here. The client lockfile is not
+# kept on the deploy branch, so resolve fresh every build — this guarantees
+# build-time deps like vite-plugin-pwa are always installed.
+COPY client/package.json ./
+RUN npm install --no-audit --no-fund
 
 COPY client/ ./
 RUN npm run build
