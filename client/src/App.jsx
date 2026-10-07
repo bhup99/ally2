@@ -12,7 +12,7 @@ const OCR_TIMEOUT_MS = 90000;
 
 // Bump this on every release. It drives the header badge, the one-time
 // deploy confirmation, and the console launch log.
-const APP_VERSION = '1.3.1';
+const APP_VERSION = '1.3.2';
 
 // Public support address shown on the home screen "Contact us" button.
 const SUPPORT_EMAIL = 'bhupeshkushwah99@gmail.com';
@@ -93,6 +93,7 @@ const OCR_LANGS = [
   { code: 'eng', label: 'English' },
   { code: 'spa', label: 'Español' },
   { code: 'kor', label: '한국어' },
+  { code: 'hin', label: 'हिन्दी' },
 ];
 const langName = (code) => (OCR_LANGS.find((l) => l.code === code) || OCR_LANGS[0]).label;
 

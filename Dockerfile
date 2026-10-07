@@ -33,7 +33,8 @@ COPY --from=client-build /app/client/dist /app/client/dist
 ADD https://cdn.jsdelivr.net/npm/@tesseract.js-data/eng/4.0.0_best_int/eng.traineddata.gz /tmp/eng.traineddata.gz
 ADD https://cdn.jsdelivr.net/npm/@tesseract.js-data/spa/4.0.0_best_int/spa.traineddata.gz /tmp/spa.traineddata.gz
 ADD https://cdn.jsdelivr.net/npm/@tesseract.js-data/kor/4.0.0_best_int/kor.traineddata.gz /tmp/kor.traineddata.gz
-RUN for lang in eng spa kor; do \
+ADD https://cdn.jsdelivr.net/npm/@tesseract.js-data/hin/4.0.0_best_int/hin.traineddata.gz /tmp/hin.traineddata.gz
+RUN for lang in eng spa kor hin; do \
       node --input-type=module -e "import {createReadStream,createWriteStream,statSync} from 'node:fs';import {createGunzip} from 'node:zlib';import {pipeline} from 'node:stream/promises';await pipeline(createReadStream('/tmp/${lang}.traineddata.gz'),createGunzip(),createWriteStream('/app/server/${lang}.traineddata'));const s=statSync('/app/server/${lang}.traineddata');if(s.size<1000000)throw new Error('traineddata looks truncated: '+s.size);console.log('${lang}.traineddata baked in ('+s.size+' bytes)');" \
       && rm /tmp/${lang}.traineddata.gz; \
     done

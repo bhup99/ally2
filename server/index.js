@@ -60,6 +60,7 @@ const OCR_LANGS = {
   eng: { name: 'English', api: 'en' },
   spa: { name: 'Spanish', api: 'es' },
   kor: { name: 'Korean', api: 'ko' },
+  hin: { name: 'Hindi', api: 'hi' },
 };
 
 // Lazily-created, reused OCR workers — one per language, so each model
