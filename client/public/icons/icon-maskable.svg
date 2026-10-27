@@ -1,6 +1,35 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
-  <!-- Maskable icon: full-bleed background, motif inside the 80% safe zone. -->
-  <rect width="512" height="512" fill="#0f766e"/>
-  <polygon points="153.6,133.12 358.4,133.12 358.4,276.48 256,389.12 153.6,276.48" fill="#ffffff"/>
-  <polyline points="202.24,258.56 243.2,299.52 314.88,212.48" fill="none" stroke="#0f766e" stroke-width="33" stroke-linecap="round" stroke-linejoin="round"/>
+  <!-- Maskable icon: full-bleed background, motif inside the 80% safe zone. Magnifier + check over an ingredient label. -->
+  <rect width="512" height="512" fill="#004756"/>
+  <g transform="translate(256 256) scale(0.8) translate(-256 -256)">
+    <circle cx="229" cy="198" r="122" fill="none" stroke="#ffffff" stroke-width="13"/>
+    <line x1="322" y1="297" x2="418" y2="403" stroke="#ffffff" stroke-width="37" stroke-linecap="round"/>
+    <line x1="322" y1="297" x2="418" y2="403" stroke="#004756" stroke-width="18" stroke-linecap="round"/>
+    <polyline points="157,210 221,253 306,144" fill="none" stroke="#50b040" stroke-width="27" stroke-linecap="round" stroke-linejoin="round"/>
+    <rect x="155" y="333" width="143" height="112" rx="18" fill="#ffffff"/>
+    <rect x="179" y="350" width="95" height="7" rx="3.5" fill="#004756"/>
+    <rect x="179" y="371" width="95" height="7" rx="3.5" fill="#004756"/>
+    <rect x="179" y="392" width="67" height="7" rx="3.5" fill="#004756"/>
+    <g fill="#111111">
+      <rect x="176" y="406" width="3" height="29"/>
+      <rect x="182" y="406" width="2" height="29"/>
+      <rect x="187" y="406" width="4" height="29"/>
+      <rect x="194" y="406" width="2" height="29"/>
+      <rect x="199" y="406" width="3" height="29"/>
+      <rect x="205" y="406" width="6" height="29"/>
+      <rect x="214" y="406" width="2" height="29"/>
+      <rect x="218" y="406" width="3" height="29"/>
+      <rect x="224" y="406" width="2" height="29"/>
+      <rect x="228" y="406" width="3" height="29"/>
+      <rect x="234" y="406" width="5" height="29"/>
+      <rect x="242" y="406" width="2" height="29"/>
+      <rect x="246" y="406" width="3" height="29"/>
+      <rect x="252" y="406" width="2" height="29"/>
+      <rect x="256" y="406" width="4" height="29"/>
+      <rect x="263" y="406" width="2" height="29"/>
+      <rect x="267" y="406" width="3" height="29"/>
+      <rect x="273" y="406" width="2" height="29"/>
+      <rect x="277" y="406" width="4" height="29"/>
+    </g>
+  </g>
 </svg>
