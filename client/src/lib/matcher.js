@@ -19,13 +19,22 @@ export function findMatches(text, selectedIds, customAllergens = []) {
   for (const a of ALLERGENS) byId.set(a.id, a);
   for (const c of customAllergens) byId.set(c.id, c);
 
+  // NOTE: `\b` only works for Latin script — it can never match a boundary
+  // around Devanagari, Hangul, etc. (those code points are all "non-word"
+  // chars, so no boundary ever exists between them and a space). That made
+  // the native-language safety net silently dead for Hindi and Korean.
+  // Use Unicode-aware lookarounds instead, so every script gets real
+  // word-boundary behavior. Lookbehind needs the `u` flag.
+  const BOUND_L = '(?<![\\p{L}\\p{M}\\p{N}_])';
+  const BOUND_R = '(?![\\p{L}\\p{M}\\p{N}_])';
+
   const ranges = [];
   for (const id of selectedIds) {
     const allergen = byId.get(id);
     if (!allergen) continue;
     for (const term of allergen.terms) {
       if (!term) continue;
-      const re = new RegExp(`\\b${escapeRegExp(term)}\\b`, 'gi');
+      const re = new RegExp(`${BOUND_L}${escapeRegExp(term)}${BOUND_R}`, 'giu');
       let m;
       while ((m = re.exec(text)) !== null) {
         // guard against zero-length matches (shouldn't happen, but safe)

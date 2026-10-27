@@ -12,7 +12,7 @@ const OCR_TIMEOUT_MS = 90000;
 
 // Bump this on every release. It drives the header badge, the one-time
 // deploy confirmation, and the console launch log.
-const APP_VERSION = '1.3.2';
+const APP_VERSION = '1.3.3';
 
 // Public support address shown on the home screen "Contact us" button.
 const SUPPORT_EMAIL = 'bhupeshkushwah99@gmail.com';
@@ -739,6 +739,13 @@ function ScanScreen({ onResult, onFailed, onBack, onHome, termGroups }) {
         {lang !== 'eng' && (
           <p className="muted small">
             We'll translate the label to English using a free translation service.
+            {(lang === 'hin' || lang === 'kor') && (
+              <>
+                {' '}
+                <strong>Beta:</strong> Hindi and Korean reading is still being tuned —
+                please double-check important ingredients on the label yourself.
+              </>
+            )}
           </p>
         )}
         {/* Library / file picker — no `capture`, so the OS offers the
