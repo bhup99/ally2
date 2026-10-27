@@ -81,6 +81,8 @@ body {
 
 .hero { text-align: center; padding: 28px 0 8px; }
 .hero .logo { width: 76px; height: 76px; }
+.scantips { padding: 10px 14px; }
+.scantips p { margin: 0; }
 .hero h2 { margin: 8px 0 4px; font-size: 1.6rem; }
 .muted { color: var(--muted); font-size: 0.95rem; margin: 0; }
 .hint { color: var(--muted); font-size: 0.9rem; text-align: center; margin: 4px 0; }

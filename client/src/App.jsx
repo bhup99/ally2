@@ -12,7 +12,7 @@ const OCR_TIMEOUT_MS = 90000;
 
 // Bump this on every release. It drives the header badge, the one-time
 // deploy confirmation, and the console launch log.
-const APP_VERSION = '1.3.5';
+const APP_VERSION = '1.3.6';
 
 // Public support address shown on the home screen "Contact us" button.
 const SUPPORT_EMAIL = 'bhupeshkushwah99@gmail.com';
@@ -651,7 +651,7 @@ function AllergiesScreen({ selected, custom, onToggle, onAddCustom, onBack, onHo
 function ScanScreen({ onResult, onFailed, onBack, onHome, termGroups }) {
   const [typed, setTyped] = useState('');
   const [status, setStatus] = useState('idle'); // idle | reading | error
-  const [errorKind, setErrorKind] = useState(null); // failed | empty
+  const [errorKind, setErrorKind] = useState(null); // failed | empty | unreadable
   const [lang, setLang] = useState('eng'); // tesseract code for the label language
   const fileRef = useRef(null);
   const cameraRef = useRef(null);
@@ -697,6 +697,15 @@ function ScanScreen({ onResult, onFailed, onBack, onHome, termGroups }) {
         onFailed(file);
         return;
       }
+      // Garbage guard: the server flags results that read as symbol soup
+      // even after auto-rotation (sideways/glary/blurry beyond rescue).
+      // Never verdict on those — a false "clear" is the worst outcome.
+      if (data.quality === 'poor') {
+        setStatus('error');
+        setErrorKind('unreadable');
+        onFailed(file);
+        return;
+      }
       onResult(
         {
           text,
@@ -704,6 +713,7 @@ function ScanScreen({ onResult, onFailed, onBack, onHome, termGroups }) {
           lang: data.lang || 'eng',
           translated: !!data.translated,
           keywordGroups: Array.isArray(data.keywordGroups) ? data.keywordGroups : null,
+          rotated: data.rotated || 0,
         },
         'photo',
         file
@@ -748,6 +758,14 @@ function ScanScreen({ onResult, onFailed, onBack, onHome, termGroups }) {
             )}
           </p>
         )}
+        <div className="card scantips">
+          <p className="small">
+            <strong>For a good scan:</strong> hold the label <strong>upright</strong> · fit the{' '}
+            <strong>whole ingredient list</strong> in the frame · tilt the pack to{' '}
+            <strong>kill glare</strong> · <strong>flatten</strong> curved packaging · get
+            close and tap to focus.
+          </p>
+        </div>
         {/* Library / file picker — no `capture`, so the OS offers the
             photo picker instead of jumping straight to the camera. */}
         <input
@@ -788,7 +806,9 @@ function ScanScreen({ onResult, onFailed, onBack, onHome, termGroups }) {
             <p className="muted">
               {errorKind === 'empty'
                 ? 'No text was found in that photo. Try a closer, well-lit shot — or paste the ingredients below.'
-                : 'Text recognition could not finish. Try another photo, or paste the ingredient list below.'}
+                : errorKind === 'unreadable'
+                  ? 'That photo was too unclear to trust — a sideways, glary or blurry shot can hide ingredients, so we won\u2019t guess. Retake it upright and straight-on, or paste the ingredients below.'
+                  : 'Text recognition could not finish. Try another photo, or paste the ingredient list below.'}
             </p>
             <label htmlFor="photo-input" className="btn">
               Try another photo
@@ -849,6 +869,9 @@ function ResultScreen({ result, analysis, selectedCount, onScanAgain, onEditAlle
           </p>
         </div>
       )}
+      {result.rotated ? (
+        <p className="muted small">📐 Your photo was sideways — we straightened it automatically to read the label.</p>
+      ) : null}
       <h3 className="sectiontitle">Label text</h3>
       {isTranslated && (
         <p className="muted small">
@@ -1148,6 +1171,7 @@ export default function App() {
       lang: ocr.lang,
       translated: ocr.translated,
       keywordGroups: ocr.keywordGroups,
+      rotated: ocr.rotated || 0,
       source,
     });
     setScreen('result');

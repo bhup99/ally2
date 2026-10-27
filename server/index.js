@@ -6,6 +6,7 @@ import multer from 'multer';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createWorker } from 'tesseract.js';
+import sharp from 'sharp';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
@@ -244,6 +245,53 @@ app.get('/.well-known/assetlinks.json', (_req, res) => {
   ]);
 });
 
+// How readable is an OCR result? A sideways/upside-down photo makes
+// Tesseract return symbol soup: many tokens, almost none of them real
+// words. Calibrated on the 2026-10-26 scan suite — every genuine label
+// (all 4 languages, even cropped/curved) had >= 9 "solid" words (tokens
+// with >= 3 letters); the sideways photo had 0. Letter *ratio* alone is
+// not used: Devanagari vowel marks are not \p{L}, so Hindi scores low on
+// ratio while reading perfectly.
+function ocrQuality(text) {
+  const tokens = (text || '').split(/\s+/).filter(Boolean);
+  const solid = tokens.filter((t) => (t.match(/\p{L}/gu) || []).length >= 3).length;
+  const ratio = tokens.length ? solid / tokens.length : 0;
+  const letters = tokens.reduce((n, t) => n + (t.match(/\p{L}/gu) || []).length, 0);
+  const avgTok = tokens.length ? letters / tokens.length : 0;
+  // Second garbage signature, from a no-text noise photo: hundreds of
+  // tokens averaging ~2.3 letters (letter soup). Real labels average
+  // >= 2.67 letters/token even in Hindi (the shortest-token language in
+  // the suite) — and the token-count floor keeps short real labels out.
+  const soup = tokens.length >= 30 && avgTok < 2.45;
+  return { solid, ratio, avgTok, poor: (solid < 4 && ratio < 0.25) || soup };
+}
+
+// Recognize an image, retrying rotated if the first pass is garbage.
+// Tesseract has no auto-orientation in this setup, and a 90° photo was a
+// total miss in testing (false "clear") — so when the upright pass reads
+// as symbol soup, try 90°/270°/180° and keep the most readable result.
+// Normal photos never pay for the extra passes.
+async function recognizeBest(worker, buffer) {
+  const first = await worker.recognize(buffer);
+  let best = { text: (first.data.text || '').trim(), rotated: 0, q: ocrQuality(first.data.text || '') };
+  if (!best.q.poor) return best;
+  for (const deg of [90, 270, 180]) {
+    let rotatedBuf;
+    try {
+      rotatedBuf = await sharp(buffer).rotate(deg).toBuffer();
+    } catch {
+      break; // undecodable image — keep the first pass
+    }
+    const { data } = await worker.recognize(rotatedBuf);
+    const q = ocrQuality(data.text || '');
+    if (q.solid > best.q.solid) {
+      best = { text: (data.text || '').trim(), rotated: deg, q };
+    }
+    if (!best.q.poor && best.q.solid >= 8) break;
+  }
+  return best;
+}
+
 // POST /api/ocr  (multipart form, fields: "image", optional "lang", optional "termGroups")
 // "lang" is a tesseract code: eng (default), spa, kor.
 // "termGroups" is JSON [{id, label, terms}] — the user's allergy keywords,
@@ -269,13 +317,21 @@ app.post('/api/ocr', ocrLimiter, upload.single('image'), async (req, res) => {
   }
   try {
     const worker = await getWorker(lang);
-    const { data } = await worker.recognize(req.file.buffer);
-    const text = (data.text || '').trim();
+    const best = await recognizeBest(worker, req.file.buffer);
+    const text = best.text;
     const [{ textEn, translated }, keywordGroups] = await Promise.all([
       translateToEnglish(text, lang),
       translateKeywords(termGroups, lang),
     ]);
-    res.json({ text, textEn, lang, translated, keywordGroups });
+    // `quality: 'poor'` means even the best orientation read as garbage —
+    // the client must refuse to verdict on it rather than say "clear".
+    // `rotated` is the clockwise degrees applied to rescue the photo (0 =
+    // used as taken).
+    res.json({
+      text, textEn, lang, translated, keywordGroups,
+      quality: best.q.poor ? 'poor' : 'good',
+      rotated: best.rotated,
+    });
   } catch (err) {
     console.error('OCR failed:', err && err.message ? err.message : err);
     res.status(500).json({ error: 'OCR_FAILED' });
