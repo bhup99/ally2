@@ -1,5 +1,7 @@
 # ---- Stage 1: build the React client ----
-FROM node:20-alpine AS client-build
+# bookworm-slim (not alpine): the client's prebuild step renders the app
+# icons from SVG with sharp, whose prebuilt binaries are glibc-based here.
+FROM node:20-bookworm-slim AS client-build
 WORKDIR /app/client
 
 # NOTE: intentionally no package-lock.json here. The client lockfile is not
